@@ -25,12 +25,12 @@ export class Transaction {
     @Column()
     date: Date;
 
-    @Column()
+    @Column({ default: null })
     note?: string;
 
-    @Column()
+    @Column({ default: false })
     isTransfer?: boolean;
 
-    @Column()
+    @Column({ default: null })
     relatedTransferAccountId?: number;
 }

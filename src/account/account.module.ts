@@ -10,6 +10,7 @@ import { CurrencyModule } from 'src/currency/currency.module';
 @Module({
   imports: [TypeOrmModule.forFeature([Account]), CurrencyModule],
   controllers: [AccountController],
-  providers: [AccountService, GetCurrencyService, CurrencyServiceFromCurrencyModule]
+  providers: [AccountService, GetCurrencyService, CurrencyServiceFromCurrencyModule],
+  exports: [TypeOrmModule]
 })
 export class AccountModule { }
