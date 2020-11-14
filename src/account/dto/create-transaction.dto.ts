@@ -3,9 +3,6 @@ import { TransactionType } from "../transaction-type.enum";
 
 export class CreateTransactionDto {
 
-    @IsNumber()
-    accountId: number;
-
     @IsEnum(TransactionType)
     transactionType: TransactionType;
 

@@ -1,11 +1,11 @@
-import { AccountType } from "./account-type.enum";
-import { Transaction } from "../transaction/transaction.entity";
+import { AccountType } from "../account-type.enum";
+import { Transaction } from "./transaction.entity";
 import { Currency } from "src/currency/currency.entity";
 
 import { Entity, Column, PrimaryGeneratedColumn, OneToMany, ManyToOne, CreateDateColumn } from 'typeorm';
 
 import { DateRange } from "src/common/date-range";
-import { AccountState } from "./account-state.enum";
+import { AccountState } from "../account-state.enum";
 
 @Entity()
 export class Account {

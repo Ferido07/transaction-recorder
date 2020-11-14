@@ -1,47 +1,51 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Account } from '../account.entity';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Account } from '../entities/account.entity';
 import { CreateAccountDto } from '../dto/create-account.dto';
 import { UpdateAccountDto } from '../dto/update-account.dto';
 import { GetCurrencyService } from './get-currency.service';
+import { Transaction } from '../entities/transaction.entity';
+import { CreateTransactionDto } from '../dto/create-transaction.dto';
+import { Inject } from '@nestjs/common/decorators/core/inject.decorator';
+import { IAccountRepository } from '../interface/account-repository.interface';
+import { DateRange } from 'src/common/date-range';
+import { TransactionType } from '../transaction-type.enum';
 
 @Injectable()
 export class AccountService {
 
-
     constructor(
-        @InjectRepository(Account) private readonly accountRepository: Repository<Account>,
-        private readonly currencyService: GetCurrencyService
+        @Inject('IAccountRepository') private readonly accountRepository: IAccountRepository,
+        private readonly currencyService: GetCurrencyService,
     ) { }
 
     findAll(): Promise<Account[]> {
-        return this.accountRepository.find();
+        return this.accountRepository.findAll();
     }
 
     findOne(id: number): Promise<Account> {
-        return this.accountRepository.findOne(id);
+        return this.accountRepository.findByIdWithTransactionDateRange(id);
     }
 
     async createAccount(createAccountDto: CreateAccountDto) {
-        // TODO: Check if currency exists
+        // Check if currency exists
         const currency = await this.currencyService.getCurrency(createAccountDto.currencyId);
-        if (currency === null || currency === undefined) {
+
+        if (currency && currency.id) {
+            // Map CreateAccountDto DTO properties to Account entity properties
+            const account: Account = new Account();
+            account.accountType = createAccountDto.accountType;
+            account.name = createAccountDto.name;
+            account.description = createAccountDto.description;
+            account.currency = currency;
+            account.startBalance = createAccountDto.startBalance;
+            account.balance = createAccountDto.startBalance;
+            account.accountNo = createAccountDto.accountNo;
+
+            // Save created Account entity and return
+            return this.accountRepository.save(account);
+        } else {
             throw new NotFoundException(`Currency with id ${createAccountDto.currencyId} not found.`);
         }
-
-        // Map CreateAccountDto DTO properties to Account entity properties
-        const account: Account = new Account();
-        account.accountType = createAccountDto.accountType;
-        account.name = createAccountDto.name;
-        account.description = createAccountDto.description;
-        account.currency = currency;
-        account.startBalance = createAccountDto.startBalance;
-        account.balance = createAccountDto.startBalance;
-        account.accountNo = createAccountDto.accountNo;
-
-        // Save created Account entity and return
-        return this.accountRepository.save(account);
     }
 
     updateAccount(id: number, updateAccountDto: UpdateAccountDto): Promise<Account> {
@@ -51,74 +55,67 @@ export class AccountService {
     }
 
     async delete(id: number): Promise<void> {
-        await this.accountRepository.delete(id);
+        const account: Account = await this.accountRepository.findByIdWithTransactionDateRange(id);
+        await this.accountRepository.delete(account);
     }
 
-
-    /*
-    set StartBalance(startBalance: number) {
-        this.startBalance = startBalance;
-        this.recalculateBalance();
+    async getAllTransactions(accountId: number): Promise<Transaction[]> {
+        const account: Account = await this.accountRepository.findByIdWithTransactionDateRange(accountId, new DateRange(DateRange.BEGINNING_OF_DATE, new Date()));
+        return Promise.resolve(account.transactions);
     }
-   
-    withdraw(amount: Amount, date?: Date, note?: string) {
-        if (amount.Currency === this.currency) {
-            if (this.balance >= amount.Amount) { //TODO: this check may cause bugs and maybe unnecessary
-                const transaction = new Transaction(null, this.id, TransactionType.DEBIT, amount, date, note);
-                transaction.TrackingState = TrackingState.ADDED;
-                this.transactions.push(transaction);
-                this.balance = this.balance - amount.Amount;
+
+    async getTransactionsByDate(accountId: number, dateRange: DateRange): Promise<Transaction[]> {
+        const account: Account = await this.accountRepository.findByIdWithTransactionDateRange(accountId, dateRange);
+        return Promise.resolve(account.transactions);
+    }
+
+    async addTransaction(accountId: number, createTransactionDto: CreateTransactionDto): Promise<Transaction> {
+        // Check if account exists
+        const account: Account = await this.accountRepository.findByIdWithTransactionDateRange(accountId);
+        if (account) {
+            // Convert CreateTransactionDto to Transaction
+            const transaction = new Transaction();
+            transaction.account = account;
+            transaction.transactionType = createTransactionDto.transactionType;
+            transaction.amount = createTransactionDto.amount;
+            transaction.date = createTransactionDto.date && createTransactionDto.date.length > 0 ? new Date(createTransactionDto.date) : new Date();
+            transaction.isTransfer = createTransactionDto.isTransfer;
+            transaction.relatedTransferAccountId = createTransactionDto.relatedTransferAccountId;
+            transaction.note = createTransactionDto.note;
+            await this.accountRepository.saveTransaction(transaction);
+            // update account balance
+            if (transaction.transactionType === TransactionType.CREDIT) {
+                account.balance += transaction.amount;
             } else {
-                throw new Error("Account balance is lower than withdrawal amount");
+                account.balance -= transaction.amount;
+            }
+            await this.accountRepository.save(account);
+            //TODO Decide what to return and which data (transaction and which one the newly saved from db?)
+            return transaction;
+            //return this.transactionRepository.save(transaction);
+        } else {
+            throw new NotFoundException(`Account with is ${accountId} not found`);
+        }
+
+    }
+
+    async removeTransaction(accountId: number, transactionId: number): Promise<void> {
+        // Check if account exists
+        const account: Account = await this.accountRepository.findByIdWithTransactionDateRange(accountId);
+        if (account) {
+            const transaction: Transaction = await this.accountRepository.findTransaction(accountId, transactionId);
+            if (transaction) {
+                await this.accountRepository.deleteTransaction(transaction);
+                // adjust account balance
+                if (transaction.transactionType === TransactionType.CREDIT) {
+                    account.balance -= transaction.amount;
+                } else {
+                    account.balance += transaction.amount;
+                }
+                await this.accountRepository.save(account);
             }
         } else {
-            throw new Error(`Account currency ${this.currency} does not match given currency ${amount.Currency}`);
+            throw new NotFoundException(`Account with is ${accountId} not found`);
         }
     }
-
-    deposit(amount: Amount, date?: Date, note?: string) {
-        if (amount.Currency === this.currency) {
-            const transaction = new Transaction(null, this.id, TransactionType.CREDIT, amount, date, note);
-            transaction.TrackingState = TrackingState.ADDED;
-            this.transactions.push(transaction);
-            this.balance = this.balance - amount.Amount;
-        } else {
-            throw new Error(`Account currency ${this.currency} does not match given currency ${amount.Currency}`);
-        }
-    }
-
-    deleteTransaction(transaction: Transaction) {
-        const transactionToBeDeleted = this.transactions.find(tra => tra.Id === transaction.Id);
-        if (transactionToBeDeleted) {
-            transactionToBeDeleted.TrackingState = TrackingState.DELETED;
-        }
-        // calculate balance
-    }
-
-    calculateDifference(): number {
-        let change = 0;
-        let transactions: Transaction[];
-        if (this.dateRange === undefined) {
-            transactions = this.transactions;
-        } else {
-            transactions = this.transactions.filter(
-                transaction => (this.dateRange as DateRange).isDateWithinRange(transaction.Date)
-            );
-        }
-
-        transactions.forEach(transaction => {
-            if (transaction.TransactionType === TransactionType.CREDIT) {
-                change += transaction.Amount.Amount;
-            } else {
-                change -= transaction.Amount.Amount;
-            }
-        });
-        return change;
-    }
-
-    private recalculateBalance() {
-        this.balance = this.startBalance + this.calculateDifference();
-        // TODO mark some problem if the balance is below 0
-    }
-    */
 }
