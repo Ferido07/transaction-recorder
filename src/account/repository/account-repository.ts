@@ -20,8 +20,9 @@ export class AccountRepository implements IAccountRepository {
         const account: Account = await this.accountRepository.findOne(id);
 
         if (dateRange) {
-            // TODO: Needs fixing
-            const transactions: Transaction[] = await this.transactionRepository.find();
+            const transactions: Transaction[] = await this.transactionRepository.find({
+                where: { account: { id: id }, date: Between(dateRange.startDate, dateRange.endDate) }
+            });
             account.transactions = transactions;
         }
 

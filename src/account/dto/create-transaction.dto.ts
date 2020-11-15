@@ -1,4 +1,4 @@
-import { IsBoolean, IsDate, IsDateString, IsEnum, IsNumber, IsOptional, IsString, ValidateIf } from "class-validator";
+import { IsBoolean, IsDateString, IsEnum, IsNumber, IsOptional, IsString, ValidateIf } from "class-validator";
 import { TransactionType } from "../transaction-type.enum";
 
 export class CreateTransactionDto {

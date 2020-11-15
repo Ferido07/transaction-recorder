@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Account } from '../entities/account.entity';
 import { CreateAccountDto } from '../dto/create-account.dto';
 import { UpdateAccountDto } from '../dto/update-account.dto';
@@ -48,10 +48,22 @@ export class AccountService {
         }
     }
 
-    updateAccount(id: number, updateAccountDto: UpdateAccountDto): Promise<Account> {
-        const account = new Account();
-        // TODO: Convert updateAccountDto to Account
-        return this.accountRepository.save(account);
+    async updateAccount(id: number, updateAccountDto: UpdateAccountDto): Promise<Account> {
+        if (updateAccountDto.accountNo || updateAccountDto.description || updateAccountDto.name || updateAccountDto.accountState) {
+            // Copy updateAccountDto to Account
+            const account = await this.accountRepository.findByIdWithTransactionDateRange(id)
+            if (account) {
+                account.name = updateAccountDto.name ? updateAccountDto.name : account.name;
+                account.description = updateAccountDto.description ? updateAccountDto.description : account.description;
+                account.accountNo = updateAccountDto.accountNo ? updateAccountDto.accountNo : account.accountNo;
+                account.accountState = updateAccountDto.accountState ? updateAccountDto.accountState : account.accountState;
+                return this.accountRepository.save(account);
+            } else {
+                throw new NotFoundException(`Account with id ${id} not found`);
+            }
+        } else {
+            throw new BadRequestException('No fields to update have been provided. Either name, description, accountState or accountNo must be provided for update');
+        }
     }
 
     async delete(id: number): Promise<void> {
@@ -59,12 +71,11 @@ export class AccountService {
         await this.accountRepository.delete(account);
     }
 
-    async getAllTransactions(accountId: number): Promise<Transaction[]> {
-        const account: Account = await this.accountRepository.findByIdWithTransactionDateRange(accountId, new DateRange(DateRange.BEGINNING_OF_DATE, new Date()));
-        return Promise.resolve(account.transactions);
+    getAllTransactions(accountId: number): Promise<Transaction[]> {
+        return this.getTransactionsByDate(accountId, new DateRange());
     }
 
-    async getTransactionsByDate(accountId: number, dateRange: DateRange): Promise<Transaction[]> {
+    async getTransactionsByDate(accountId: number, dateRange?: DateRange): Promise<Transaction[]> {
         const account: Account = await this.accountRepository.findByIdWithTransactionDateRange(accountId, dateRange);
         return Promise.resolve(account.transactions);
     }
@@ -90,9 +101,8 @@ export class AccountService {
                 account.balance -= transaction.amount;
             }
             await this.accountRepository.save(account);
-            //TODO Decide what to return and which data (transaction and which one the newly saved from db?)
+            // Return transaction with the account information
             return transaction;
-            //return this.transactionRepository.save(transaction);
         } else {
             throw new NotFoundException(`Account with is ${accountId} not found`);
         }

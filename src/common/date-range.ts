@@ -2,9 +2,9 @@ export class DateRange {
     private readonly start: Date;
     private readonly end: Date;
 
-    constructor(start: Date, end: Date) {
-        this.start = start;
-        this.end = end;
+    constructor(start?: Date, end?: Date) {
+        this.start = start ? start : DateRange.BEGINNING_OF_DATE;
+        this.end = end ? end : new Date();
     }
 
     static BEGINNING_OF_DATE: Date = new Date(Date.UTC(2020, 0, 1, 0, 0, 0, 0));
